@@ -12,13 +12,13 @@ import logging
 import math
 from zoneinfo import ZoneInfo
 
-from custom_components.pv_excess_control.const import (
+from custom_components.solar_power_control.const import (
     DEFAULT_DYNAMIC_ON_THRESHOLD,
     DEFAULT_GRID_VOLTAGE,
     DEFAULT_OFF_THRESHOLD,
     DEFAULT_ON_THRESHOLD,
 )
-from custom_components.pv_excess_control.models import (
+from custom_components.solar_power_control.models import (
     Action,
     ApplianceConfig,
     ApplianceState,
@@ -26,7 +26,7 @@ from custom_components.pv_excess_control.models import (
     OptimizerResult,
     PowerState,
 )
-from custom_components.pv_excess_control.status_formatter import format_duration
+from custom_components.solar_power_control.status_formatter import format_duration
 
 _LOGGER = logging.getLogger(__name__)
 

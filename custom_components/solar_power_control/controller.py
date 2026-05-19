@@ -195,7 +195,7 @@ class Controller:
             applied.append({"appliance_id": config.id, "action": decision.action})
 
             self.hass.bus.async_fire(
-                "pv_excess_control.appliance_switched",
+                "solar_power_control.appliance_switched",
                 {
                     "appliance_id": config.id,
                     "appliance_name": config.name,

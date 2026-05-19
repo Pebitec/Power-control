@@ -1,7 +1,7 @@
 """Constants for the PV Excess Control integration."""
 from enum import StrEnum
 
-DOMAIN = "pv_excess_control"
+DOMAIN = "solar_power_control"
 MANUFACTURER = "Solar Power Control"
 
 # Defaults

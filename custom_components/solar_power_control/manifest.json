@@ -1,5 +1,5 @@
 {
-  "domain": "pv_excess_control",
+  "domain": "solar_power_control",
   "name": "Solar Power Control",
   "codeowners": ["@InventoCasa"],
   "config_flow": true,

@@ -47,7 +47,7 @@ No batteries, no tariff schedules, no 24-hour planners — just straightforward 
 
 ### Manual
 
-1. Copy the `custom_components/pv_excess_control` folder into your `config/custom_components/` directory
+1. Copy the `custom_components/solar_power_control` folder into your `config/custom_components/` directory
 2. Restart Home Assistant
 3. Go to **Settings → Devices & Services → Add Integration** and search for **Solar Power Control**
 
