@@ -2,7 +2,7 @@
 from enum import StrEnum
 
 DOMAIN = "pv_excess_control"
-MANUFACTURER = "PV Excess Control"
+MANUFACTURER = "Solar Power Control"
 
 # Defaults
 DEFAULT_CONTROLLER_INTERVAL = 30  # seconds

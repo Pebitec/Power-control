@@ -1,6 +1,6 @@
 {
   "domain": "pv_excess_control",
-  "name": "PV Excess Control",
+  "name": "Solar Power Control",
   "codeowners": ["@InventoCasa"],
   "config_flow": true,
   "documentation": "https://github.com/InventoCasa/PV-Excess-Control",
