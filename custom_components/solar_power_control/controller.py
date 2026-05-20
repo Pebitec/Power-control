@@ -1,4 +1,4 @@
-"""Controller for PV Excess Control.
+"""Controller for Solar Power Control.
 
 Bridges Home Assistant state with the optimizer:
 - Collects sensor states and builds PowerState
@@ -68,28 +68,6 @@ class Controller:
             val = _normalise_power(val, state.attributes.get("unit_of_measurement"))
         return val
 
-    def _read_sensor_optional(self, entity_id: str | None, *, power: bool = False) -> float | None:
-        if not entity_id:
-            return None
-        state = self.hass.states.get(entity_id)
-        if state is None or state.state in _UNAVAILABLE_STATES:
-            return None
-        try:
-            val = float(state.state)
-        except (ValueError, TypeError):
-            return None
-        if power:
-            val = _normalise_power(val, state.attributes.get("unit_of_measurement"))
-        return val
-
-    def _read_binary(self, entity_id: str | None) -> bool | None:
-        if not entity_id:
-            return None
-        state = self.hass.states.get(entity_id)
-        if state is None or state.state in ("unavailable", "unknown"):
-            return None
-        return state.state == "on"
-
     def collect_power_state(self) -> PowerState:
         """Read sensor entities and build PowerState."""
         data = self.config_data
@@ -142,25 +120,15 @@ class Controller:
             if config.actual_power_entity:
                 current_power = self._read_sensor(config.actual_power_entity, power=True)
 
-            current_amperage: float | None = None
-            if config.current_entity:
-                current_amperage = self._read_sensor_optional(config.current_entity)
-
-            ev_connected: bool | None = None
-            if config.ev_connected_entity:
-                ev_connected = self._read_binary(config.ev_connected_entity)
-
             runtime_today = runtime_tracker.get(config.id, timedelta())
 
             state = ApplianceState(
                 appliance_id=config.id,
                 is_on=is_on,
                 current_power=current_power,
-                current_amperage=current_amperage,
                 runtime_today=runtime_today,
                 energy_today=0.0,
                 last_state_change=None,
-                ev_connected=ev_connected,
             )
             states.append(state)
 
@@ -189,7 +157,6 @@ class Controller:
             if not self._needs_change(decision, current_state, config):
                 continue
 
-            entity_id = config.entity_id
             await self._apply_single(decision, config)
             self._last_state_change[config.id] = datetime.now()
             applied.append({"appliance_id": config.id, "action": decision.action})
@@ -233,8 +200,6 @@ class Controller:
                 return False
             if config.on_only:
                 return False
-        elif decision.action == Action.SET_CURRENT:
-            return True
 
         return True
 
@@ -248,14 +213,6 @@ class Controller:
             if config.on_only:
                 return
             await self._turn_off(domain, entity_id)
-        elif decision.action == Action.SET_CURRENT:
-            if config.current_entity and decision.target_current is not None:
-                current_domain = config.current_entity.split(".")[0]
-                await self.hass.services.async_call(
-                    current_domain,
-                    "set_value",
-                    {"entity_id": config.current_entity, "value": decision.target_current},
-                )
 
     async def _turn_on(self, domain: str, entity_id: str) -> None:
         service_map = {

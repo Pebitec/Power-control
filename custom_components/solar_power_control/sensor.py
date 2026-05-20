@@ -23,7 +23,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_APPLIANCE_NAME, DOMAIN, MANUFACTURER
-from .coordinator import PvExcessCoordinator
+from .coordinator import SolarPowerCoordinator
 from .status_formatter import FormattedStatus, format_status
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up PV Excess Control sensor entities from a config entry."""
-    coordinator: PvExcessCoordinator = hass.data[DOMAIN][config_entry.entry_id]
+    coordinator: SolarPowerCoordinator = hass.data[DOMAIN][config_entry.entry_id]
 
     entities: list[SensorEntity] = [
         PvExcessPowerSensor(coordinator),
@@ -55,14 +55,14 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class PvExcessBaseSensor(CoordinatorEntity[PvExcessCoordinator], SensorEntity):
+class SolarPowerBaseSensor(CoordinatorEntity[SolarPowerCoordinator], SensorEntity):
     """Base class for PV Excess Control sensors."""
 
     _attr_has_entity_name = True
 
     def __init__(
         self,
-        coordinator: PvExcessCoordinator,
+        coordinator: SolarPowerCoordinator,
         unique_id_suffix: str,
         name: str,
     ) -> None:
@@ -83,14 +83,14 @@ class PvExcessBaseSensor(CoordinatorEntity[PvExcessCoordinator], SensorEntity):
         return self.coordinator.data
 
 
-class PvExcessPowerSensor(PvExcessBaseSensor):
+class PvExcessPowerSensor(SolarPowerBaseSensor):
     """Sensor reporting current PV excess power in Watts."""
 
     _attr_device_class = SensorDeviceClass.POWER
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = UnitOfPower.WATT
 
-    def __init__(self, coordinator: PvExcessCoordinator) -> None:
+    def __init__(self, coordinator: SolarPowerCoordinator) -> None:
         super().__init__(coordinator, "excess_power", "Excess Power")
 
     @property
@@ -104,12 +104,12 @@ class PvExcessPowerSensor(PvExcessBaseSensor):
         return power_state.excess_power
 
 
-class PvApplianceBaseSensor(PvExcessBaseSensor):
+class PvApplianceBaseSensor(SolarPowerBaseSensor):
     """Base class for per-appliance sensors."""
 
     def __init__(
         self,
-        coordinator: PvExcessCoordinator,
+        coordinator: SolarPowerCoordinator,
         appliance_id: str,
         appliance_name: str,
         suffix: str,

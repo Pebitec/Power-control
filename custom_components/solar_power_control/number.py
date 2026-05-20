@@ -17,7 +17,7 @@ from .const import (
     MAX_PRIORITY,
     MIN_PRIORITY,
 )
-from .coordinator import PvExcessCoordinator
+from .coordinator import SolarPowerCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up PV Excess Control number entities."""
-    coordinator: PvExcessCoordinator = hass.data[DOMAIN][config_entry.entry_id]
+    coordinator: SolarPowerCoordinator = hass.data[DOMAIN][config_entry.entry_id]
 
     entities: list[NumberEntity] = []
 
@@ -40,7 +40,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class AppliancePriorityNumber(CoordinatorEntity[PvExcessCoordinator], NumberEntity):
+class AppliancePriorityNumber(CoordinatorEntity[SolarPowerCoordinator], NumberEntity):
     """Per-appliance priority number entity."""
 
     _attr_has_entity_name = True
@@ -52,7 +52,7 @@ class AppliancePriorityNumber(CoordinatorEntity[PvExcessCoordinator], NumberEnti
 
     def __init__(
         self,
-        coordinator: PvExcessCoordinator,
+        coordinator: SolarPowerCoordinator,
         appliance_id: str,
         appliance_name: str,
     ) -> None:

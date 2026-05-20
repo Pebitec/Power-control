@@ -6,7 +6,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .coordinator import PvExcessCoordinator
+from .coordinator import SolarPowerCoordinator
 
 
 async def async_setup_entry(
