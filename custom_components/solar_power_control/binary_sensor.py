@@ -11,7 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_APPLIANCE_NAME, DOMAIN, MANUFACTURER
-from .coordinator import PvExcessCoordinator
+from .coordinator import SolarPowerCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up PV Excess Control binary sensor entities."""
-    coordinator: PvExcessCoordinator = hass.data[DOMAIN][config_entry.entry_id]
+    coordinator: SolarPowerCoordinator = hass.data[DOMAIN][config_entry.entry_id]
 
     entities: list[BinarySensorEntity] = [
         ExcessAvailableBinarySensor(coordinator),
@@ -43,13 +43,13 @@ async def async_setup_entry(
 
 
 class _PvExcessBinarySensorBase(
-    CoordinatorEntity[PvExcessCoordinator], BinarySensorEntity
+    CoordinatorEntity[SolarPowerCoordinator], BinarySensorEntity
 ):
     """Base class for PV Excess Control binary sensor entities."""
 
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator: PvExcessCoordinator) -> None:
+    def __init__(self, coordinator: SolarPowerCoordinator) -> None:
         super().__init__(coordinator)
 
     @property
@@ -71,7 +71,7 @@ class ExcessAvailableBinarySensor(_PvExcessBinarySensorBase):
     _attr_name = "Excess Available"
     _attr_icon = "mdi:solar-power"
 
-    def __init__(self, coordinator: PvExcessCoordinator) -> None:
+    def __init__(self, coordinator: SolarPowerCoordinator) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_excess_available"
 
@@ -107,7 +107,7 @@ class ApplianceActiveBinarySensor(_PvExcessBinarySensorBase):
 
     def __init__(
         self,
-        coordinator: PvExcessCoordinator,
+        coordinator: SolarPowerCoordinator,
         appliance_id: str,
         appliance_name: str,
     ) -> None:

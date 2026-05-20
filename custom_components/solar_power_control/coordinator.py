@@ -1,4 +1,4 @@
-"""DataUpdateCoordinator for PV Excess Control.
+"""DataUpdateCoordinator for Solar Power Control.
 
 Central data hub that:
 1. Collects sensor states from Home Assistant
@@ -28,31 +28,20 @@ from .const import (
     CONF_AVERAGING_WINDOW,
     CONF_COMPLETION_POWER_THRESHOLD,
     CONF_CONTROLLER_INTERVAL,
-    CONF_CURRENT_ENTITY,
-    CONF_CURRENT_STEP,
-    CONF_DYNAMIC_CURRENT,
     CONF_ENABLE_PREEMPTION,
-    CONF_EV_CONNECTED_ENTITY,
-    CONF_EV_SOC_ENTITY,
-    CONF_EV_TARGET_SOC,
     CONF_GRID_EXPORT,
-    CONF_GRID_VOLTAGE,
     CONF_HELPER_ONLY,
     CONF_IMPORT_EXPORT,
     CONF_LOAD_POWER,
-    CONF_MAX_CURRENT,
-    CONF_MIN_CURRENT,
     CONF_NOMINAL_POWER,
     CONF_OFF_THRESHOLD,
     CONF_ON_ONLY,
     CONF_ON_THRESHOLD,
-    CONF_PHASES,
     CONF_PROTECT_FROM_PREEMPTION,
     CONF_PV_POWER,
     CONF_REQUIRES_APPLIANCE,
     CONF_SWITCH_INTERVAL,
     DEFAULT_CONTROLLER_INTERVAL,
-    DEFAULT_GRID_VOLTAGE,
     DEFAULT_OFF_THRESHOLD,
     DEFAULT_STARTUP_GRACE_PERIOD,
     DEFAULT_SWITCH_INTERVAL,
@@ -110,28 +99,8 @@ def _parse_sensor_float(
     return val
 
 
-def _parse_sensor_bool(hass: HomeAssistant, entity_id: str | None) -> bool | None:
-    if entity_id is None:
-        return None
-    state = hass.states.get(entity_id)
-    if state is None or state.state in _UNAVAILABLE_STATES:
-        return None
-    return state.state in ("on", "true", "True", "1")
-
-
-def _parse_time_string(value: str | None):
-    if value is None:
-        return None
-    try:
-        from datetime import time
-        parts = value.split(":")
-        return time(int(parts[0]), int(parts[1]))
-    except (ValueError, IndexError, TypeError):
-        return None
-
-
-class PvExcessCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """Coordinator for PV Excess Control."""
+class SolarPowerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """Coordinator for Solar Power Control."""
 
     config_entry: ConfigEntry
 
@@ -147,12 +116,10 @@ class PvExcessCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(seconds=controller_interval),
         )
 
-        grid_voltage = config_entry.data.get(CONF_GRID_VOLTAGE, DEFAULT_GRID_VOLTAGE)
         tz_name = str(hass.config.time_zone) if hasattr(hass.config, "time_zone") else "UTC"
         enable_preemption = config_entry.data.get(CONF_ENABLE_PREEMPTION, True)
         off_threshold = config_entry.data.get(CONF_OFF_THRESHOLD, DEFAULT_OFF_THRESHOLD)
         self.optimizer = Optimizer(
-            grid_voltage=grid_voltage,
             timezone_str=tz_name,
             enable_preemption=enable_preemption,
             off_threshold=off_threshold,
@@ -181,7 +148,6 @@ class PvExcessCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.appliance_priorities[subentry_id] = saved_priority
 
         self._last_state_change: dict[str, datetime] = {}
-        self._last_applied_current: dict[str, float] = {}
         self._activations_today: dict[str, int] = {}
         self._needed_by_others: set[str] = set()
         self._previous_is_on: dict[str, bool] = {}
@@ -189,8 +155,7 @@ class PvExcessCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.analytics = AnalyticsTracker(import_price=0.25, feed_in_tariff=0.0)
 
         _LOGGER.info(
-            "PV Excess Control initialized: voltage=%sV, controller_interval=%ss",
-            config_entry.data.get(CONF_GRID_VOLTAGE, "?"),
+            "Solar Power Control initialized: controller_interval=%ss",
             controller_interval,
         )
 
@@ -210,12 +175,9 @@ class PvExcessCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 appliance_id=state.appliance_id,
                 is_on=state.is_on,
                 current_power=state.current_power,
-                current_amperage=state.current_amperage,
                 runtime_today=timedelta(),
                 energy_today=0.0,
                 last_state_change=state.last_state_change,
-                ev_connected=state.ev_connected,
-                ev_soc=state.ev_soc,
                 activations_today=0,
             )
         self.appliance_states = new_states
@@ -270,10 +232,6 @@ class PvExcessCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             return self._build_coordinator_data()
 
-        # Refresh grid_voltage from config each cycle
-        grid_voltage = self.config_entry.data.get(CONF_GRID_VOLTAGE, DEFAULT_GRID_VOLTAGE)
-        self.optimizer.grid_voltage = grid_voltage
-
         # 5. Run optimizer
         try:
             result = self.optimizer.optimize(
@@ -290,16 +248,15 @@ class PvExcessCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         on_count = sum(1 for d in result.decisions if d.action == Action.ON)
         off_count = sum(1 for d in result.decisions if d.action == Action.OFF)
-        set_count = sum(1 for d in result.decisions if d.action == Action.SET_CURRENT)
         _LOGGER.debug(
-            "Optimizer: %d decisions (ON=%d OFF=%d SET_CURRENT=%d)",
-            len(result.decisions), on_count, off_count, set_count,
+            "Optimizer: %d decisions (ON=%d OFF=%d)",
+            len(result.decisions), on_count, off_count,
         )
 
         # 6. Record analytics
         cycle_seconds = self.update_interval.total_seconds()
         for decision in result.decisions:
-            if decision.action in (Action.ON, Action.SET_CURRENT):
+            if decision.action == Action.ON:
                 if not self.appliance_enabled.get(decision.appliance_id, True):
                     continue
                 config = self._get_appliance_config_by_id(decision.appliance_id)
@@ -427,23 +384,14 @@ class PvExcessCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 name=sub_data.get(CONF_APPLIANCE_NAME, f"Appliance {subentry_id}"),
                 entity_id=entity_id,
                 priority=priority,
-                phases=int(sub_data.get(CONF_PHASES, 1)),
                 nominal_power=sub_data.get(CONF_NOMINAL_POWER, 0.0),
                 actual_power_entity=sub_data.get(CONF_ACTUAL_POWER_ENTITY),
-                dynamic_current=sub_data.get(CONF_DYNAMIC_CURRENT, False),
-                current_entity=sub_data.get(CONF_CURRENT_ENTITY),
-                min_current=sub_data.get(CONF_MIN_CURRENT, 6.0),
-                max_current=sub_data.get(CONF_MAX_CURRENT, 16.0),
-                ev_soc_entity=sub_data.get(CONF_EV_SOC_ENTITY),
-                ev_connected_entity=sub_data.get(CONF_EV_CONNECTED_ENTITY),
-                ev_target_soc=sub_data.get(CONF_EV_TARGET_SOC),
                 on_only=sub_data.get(CONF_ON_ONLY, False),
                 switch_interval=switch_interval,
                 averaging_window=sub_data.get(CONF_AVERAGING_WINDOW),
                 requires_appliance=sub_data.get(CONF_REQUIRES_APPLIANCE),
                 helper_only=sub_data.get(CONF_HELPER_ONLY, False),
                 protect_from_preemption=sub_data.get(CONF_PROTECT_FROM_PREEMPTION, False),
-                current_step=sub_data.get(CONF_CURRENT_STEP, 0.1),
                 override_active=override_active,
                 on_threshold=sub_data.get(CONF_ON_THRESHOLD),
                 completion_power_threshold=sub_data.get(CONF_COMPLETION_POWER_THRESHOLD),
@@ -457,7 +405,6 @@ class PvExcessCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         active_ids = set(subentries.keys())
         for d in (
             self._last_state_change,
-            self._last_applied_current,
             self._activations_today,
             self._previous_is_on,
             self.appliance_enabled,
@@ -489,18 +436,6 @@ class PvExcessCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if config.actual_power_entity:
                 current_power = (_parse_sensor_float(self.hass, config.actual_power_entity, power=True) or 0.0)
 
-            current_amperage: float | None = None
-            if config.current_entity:
-                current_amperage = _parse_sensor_float(self.hass, config.current_entity)
-
-            ev_connected: bool | None = None
-            if config.ev_connected_entity:
-                ev_connected = _parse_sensor_bool(self.hass, config.ev_connected_entity)
-
-            ev_soc: float | None = None
-            if config.ev_soc_entity:
-                ev_soc = _parse_sensor_float(self.hass, config.ev_soc_entity)
-
             previous = self.appliance_states.get(config.id)
             runtime_today = previous.runtime_today if previous else timedelta()
             energy_today = previous.energy_today if previous else 0.0
@@ -527,12 +462,9 @@ class PvExcessCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 appliance_id=config.id,
                 is_on=is_on,
                 current_power=current_power,
-                current_amperage=current_amperage,
                 runtime_today=runtime_today,
                 energy_today=energy_today,
                 last_state_change=last_state_change,
-                ev_connected=ev_connected,
-                ev_soc=ev_soc,
                 activations_today=self._activations_today.get(config.id, 0),
             )
             states[config.id] = state
@@ -561,12 +493,9 @@ class PvExcessCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     appliance_id=old.appliance_id,
                     is_on=is_on,
                     current_power=current_power,
-                    current_amperage=old.current_amperage,
                     runtime_today=old.runtime_today,
                     energy_today=old.energy_today,
                     last_state_change=old.last_state_change,
-                    ev_connected=old.ev_connected,
-                    ev_soc=old.ev_soc,
                     activations_today=old.activations_today,
                 )
 
@@ -617,16 +546,15 @@ class PvExcessCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             is_needed_by_others = decision.appliance_id in self._needed_by_others
             if not decision.bypasses_cooldown and not is_needed_by_others:
-                if decision.action != Action.SET_CURRENT or not is_on:
-                    last_change = self._last_state_change.get(decision.appliance_id)
-                    if last_change is not None:
-                        elapsed = (datetime.now() - last_change).total_seconds()
-                        if elapsed < appliance_config.switch_interval:
-                            _LOGGER.debug(
-                                "Skipping %s for %s: switch interval not elapsed (%.0fs of %ds)",
-                                decision.action, appliance_config.name, elapsed, appliance_config.switch_interval,
-                            )
-                            continue
+                last_change = self._last_state_change.get(decision.appliance_id)
+                if last_change is not None:
+                    elapsed = (datetime.now() - last_change).total_seconds()
+                    if elapsed < appliance_config.switch_interval:
+                        _LOGGER.debug(
+                            "Skipping %s for %s: switch interval not elapsed (%.0fs of %ds)",
+                            decision.action, appliance_config.name, elapsed, appliance_config.switch_interval,
+                        )
+                        continue
 
             try:
                 if decision.action == Action.ON:
@@ -639,42 +567,8 @@ class PvExcessCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         await self.hass.services.async_call(
                             domain, "turn_off", {"entity_id": entity_id}, blocking=True,
                         )
-                    self._last_applied_current.pop(decision.appliance_id, None)
-                elif decision.action == Action.SET_CURRENT:
-                    if appliance_config.current_entity and decision.target_current is not None:
-                        if (
-                            is_on
-                            and decision.target_current == self._last_applied_current.get(decision.appliance_id)
-                        ):
-                            continue
 
-                        current_domain = (
-                            appliance_config.current_entity.split(".")[0]
-                            if "." in appliance_config.current_entity
-                            else "number"
-                        )
-                        async with asyncio.timeout(10):
-                            await self.hass.services.async_call(
-                                current_domain,
-                                "set_value",
-                                {"entity_id": appliance_config.current_entity, "value": decision.target_current},
-                                blocking=True,
-                            )
-                        self._last_applied_current[decision.appliance_id] = decision.target_current
-
-                        if not is_on:
-                            async with asyncio.timeout(10):
-                                await self.hass.services.async_call(
-                                    domain, "turn_on", {"entity_id": entity_id}, blocking=True,
-                                )
-                    else:
-                        continue
-
-                if decision.action in (Action.ON, Action.OFF):
-                    self._last_state_change[decision.appliance_id] = datetime.now()
-                elif decision.action == Action.SET_CURRENT and not is_on:
-                    self._last_state_change[decision.appliance_id] = datetime.now()
-
+                self._last_state_change[decision.appliance_id] = datetime.now()
                 applied_ids.append(decision.appliance_id)
                 _LOGGER.info(
                     "Applied %s to %s (%s): %s",
@@ -701,23 +595,14 @@ class PvExcessCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             name=sub_data.get(CONF_APPLIANCE_NAME, f"Appliance {appliance_id}"),
             entity_id=sub_data.get(CONF_APPLIANCE_ENTITY, ""),
             priority=priority,
-            phases=int(sub_data.get(CONF_PHASES, 1)),
             nominal_power=sub_data.get(CONF_NOMINAL_POWER, 0.0),
             actual_power_entity=sub_data.get(CONF_ACTUAL_POWER_ENTITY),
-            dynamic_current=sub_data.get(CONF_DYNAMIC_CURRENT, False),
-            current_entity=sub_data.get(CONF_CURRENT_ENTITY),
-            min_current=sub_data.get(CONF_MIN_CURRENT, 6.0),
-            max_current=sub_data.get(CONF_MAX_CURRENT, 16.0),
-            ev_soc_entity=sub_data.get(CONF_EV_SOC_ENTITY),
-            ev_connected_entity=sub_data.get(CONF_EV_CONNECTED_ENTITY),
-            ev_target_soc=sub_data.get(CONF_EV_TARGET_SOC),
             on_only=sub_data.get(CONF_ON_ONLY, False),
             switch_interval=int(max(5, sub_data.get(CONF_SWITCH_INTERVAL, DEFAULT_SWITCH_INTERVAL))),
             averaging_window=sub_data.get(CONF_AVERAGING_WINDOW),
             requires_appliance=sub_data.get(CONF_REQUIRES_APPLIANCE),
             helper_only=sub_data.get(CONF_HELPER_ONLY, False),
             protect_from_preemption=sub_data.get(CONF_PROTECT_FROM_PREEMPTION, False),
-            current_step=sub_data.get(CONF_CURRENT_STEP, 0.1),
             override_active=override_active,
             on_threshold=sub_data.get(CONF_ON_THRESHOLD),
             completion_power_threshold=sub_data.get(CONF_COMPLETION_POWER_THRESHOLD),

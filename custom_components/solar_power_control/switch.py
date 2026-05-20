@@ -11,7 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_APPLIANCE_NAME, DOMAIN, MANUFACTURER
-from .coordinator import PvExcessCoordinator
+from .coordinator import SolarPowerCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up PV Excess Control switch entities."""
-    coordinator: PvExcessCoordinator = hass.data[DOMAIN][config_entry.entry_id]
+    coordinator: SolarPowerCoordinator = hass.data[DOMAIN][config_entry.entry_id]
 
     entities: list[SwitchEntity] = [
         ControlEnabledSwitch(coordinator),
@@ -37,12 +37,12 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class _PvExcessSwitchBase(CoordinatorEntity[PvExcessCoordinator], SwitchEntity):
+class _SolarPowerSwitchBase(CoordinatorEntity[SolarPowerCoordinator], SwitchEntity):
     """Base class for PV Excess Control switch entities."""
 
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator: PvExcessCoordinator) -> None:
+    def __init__(self, coordinator: SolarPowerCoordinator) -> None:
         super().__init__(coordinator)
 
     @property
@@ -65,13 +65,13 @@ class _PvExcessSwitchBase(CoordinatorEntity[PvExcessCoordinator], SwitchEntity):
             _LOGGER.warning("Could not persist %s change: %s", key, err)
 
 
-class ControlEnabledSwitch(_PvExcessSwitchBase):
+class ControlEnabledSwitch(_SolarPowerSwitchBase):
     """Master enable/disable switch for the controller."""
 
     _attr_name = "Control Enabled"
     _attr_icon = "mdi:power"
 
-    def __init__(self, coordinator: PvExcessCoordinator) -> None:
+    def __init__(self, coordinator: SolarPowerCoordinator) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_control_enabled"
 
@@ -90,14 +90,14 @@ class ControlEnabledSwitch(_PvExcessSwitchBase):
         self.async_write_ha_state()
 
 
-class ApplianceEnabledSwitch(_PvExcessSwitchBase):
+class ApplianceEnabledSwitch(_SolarPowerSwitchBase):
     """Per-appliance enable/disable switch."""
 
     _attr_icon = "mdi:toggle-switch"
 
     def __init__(
         self,
-        coordinator: PvExcessCoordinator,
+        coordinator: SolarPowerCoordinator,
         appliance_id: str,
         appliance_name: str,
     ) -> None:
@@ -141,14 +141,14 @@ class ApplianceEnabledSwitch(_PvExcessSwitchBase):
         self.async_write_ha_state()
 
 
-class ApplianceOverrideSwitch(_PvExcessSwitchBase):
+class ApplianceOverrideSwitch(_SolarPowerSwitchBase):
     """Per-appliance manual override switch."""
 
     _attr_icon = "mdi:hand-back-right"
 
     def __init__(
         self,
-        coordinator: PvExcessCoordinator,
+        coordinator: SolarPowerCoordinator,
         appliance_id: str,
         appliance_name: str,
     ) -> None:

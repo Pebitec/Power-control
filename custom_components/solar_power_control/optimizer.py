@@ -1,10 +1,10 @@
-"""Optimizer for PV Excess Control. Pure logic engine - no Home Assistant dependencies.
+"""Optimizer for Solar Power Control. Pure logic engine - no Home Assistant dependencies.
 
 Runs 3 phases per cycle:
   Phase 1:   ASSESS  - Calculate averaged excess, apply hysteresis, check constraints
   Phase 2:   ALLOCATE - Assign excess power to appliances by priority
   Phase 2.5: PREEMPT - Shed lower-priority ON appliances to start higher-priority IDLE ones
-  Phase 3:   SHED - Reduce/turn off lowest-priority appliances when excess is negative
+  Phase 3:   SHED - Turn off lowest-priority appliances when excess is negative
 """
 from __future__ import annotations
 
@@ -13,8 +13,6 @@ import math
 from zoneinfo import ZoneInfo
 
 from custom_components.solar_power_control.const import (
-    DEFAULT_DYNAMIC_ON_THRESHOLD,
-    DEFAULT_GRID_VOLTAGE,
     DEFAULT_OFF_THRESHOLD,
     DEFAULT_ON_THRESHOLD,
 )
@@ -26,14 +24,8 @@ from custom_components.solar_power_control.models import (
     OptimizerResult,
     PowerState,
 )
-from custom_components.solar_power_control.status_formatter import format_duration
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _step_floor(value: float, step: float) -> float:
-    """Round down to nearest multiple of step."""
-    return math.floor(value / step) * step
 
 
 class Optimizer:
@@ -46,13 +38,11 @@ class Optimizer:
 
     def __init__(
         self,
-        grid_voltage: int = DEFAULT_GRID_VOLTAGE,
         timezone_str: str | None = None,
         enable_preemption: bool = True,
         off_threshold: int = DEFAULT_OFF_THRESHOLD,
         min_good_samples: int = 3,
     ) -> None:
-        self.grid_voltage = grid_voltage
         self._tz = ZoneInfo(timezone_str) if timezone_str else None
         self.enable_preemption = enable_preemption
         self._off_threshold = off_threshold
@@ -70,7 +60,7 @@ class Optimizer:
         Phase 1:   ASSESS - compute averaged excess, apply hysteresis
         Phase 2:   ALLOCATE - assign excess to appliances by priority
         Phase 2.5: PREEMPT - shed lower-priority ON appliances for higher-priority IDLE ones
-        Phase 3:   SHED - reduce/turn off lowest priority when over-budget
+        Phase 3:   SHED - turn off lowest priority when over-budget
         """
         state_by_id: dict[str, ApplianceState] = {
             s.appliance_id: s for s in appliance_states
@@ -130,7 +120,6 @@ class Optimizer:
                 decisions.append(ControlDecision(
                     appliance_id=appliance.id,
                     action=Action.IDLE,
-                    target_current=None,
                     reason="No state data available",
                     overrides_plan=False,
                 ))
@@ -200,7 +189,7 @@ class Optimizer:
         decision_by_id = {d.appliance_id: d for d in decisions}
         for dep_id in dependent_ids:
             dec = decision_by_id.get(dep_id)
-            if dec is not None and dec.action in (Action.ON, Action.SET_CURRENT):
+            if dec is not None and dec.action == Action.ON:
                 return True
             if dec is not None and dec.action == Action.OFF:
                 continue
@@ -219,35 +208,11 @@ class Optimizer:
         """Apply excess-independent safety rules to a single appliance."""
         # Manual override check
         if appliance.override_active:
-            if appliance.dynamic_current and appliance.current_entity:
-                phases = max(appliance.phases, 1)
-                if state.is_on:
-                    if state.current_power > 0:
-                        current_power = state.current_power
-                    elif state.current_amperage is not None and state.current_amperage > 0:
-                        current_power = state.current_amperage * self.grid_voltage * phases
-                    else:
-                        current_power = appliance.nominal_power
-                    target_power = appliance.max_current * self.grid_voltage * phases
-                    power_consumed = max(target_power - current_power, 0.0)
-                else:
-                    power_consumed = appliance.max_current * self.grid_voltage * phases
-                return (
-                    ControlDecision(
-                        appliance_id=appliance.id,
-                        action=Action.SET_CURRENT,
-                        target_current=appliance.max_current,
-                        reason="Manual override active (dynamic current at max)",
-                        overrides_plan=True,
-                    ),
-                    power_consumed,
-                )
             power_consumed = appliance.nominal_power if not state.is_on else 0.0
             return (
                 ControlDecision(
                     appliance_id=appliance.id,
                     action=Action.ON,
-                    target_current=None,
                     reason="Manual override active",
                     overrides_plan=True,
                 ),
@@ -261,7 +226,6 @@ class Optimizer:
                     ControlDecision(
                         appliance_id=appliance.id,
                         action=Action.ON,
-                        target_current=None,
                         reason="Helper-only: dependent is running",
                         overrides_plan=False,
                     ),
@@ -273,7 +237,6 @@ class Optimizer:
                     ControlDecision(
                         appliance_id=appliance.id,
                         action=action,
-                        target_current=None,
                         reason="Helper-only: no dependent running",
                         overrides_plan=False,
                         bypasses_cooldown=True,
@@ -281,47 +244,12 @@ class Optimizer:
                     0.0,
                 )
 
-        # EV connected check
-        if appliance.ev_connected_entity and state.ev_connected is not True:
-            action = Action.OFF if state.is_on else Action.IDLE
-            return (
-                ControlDecision(
-                    appliance_id=appliance.id,
-                    action=action,
-                    target_current=None,
-                    reason="EV not confirmed connected (sensor: %s)" % (
-                        "unavailable" if state.ev_connected is None else "disconnected"
-                    ),
-                    overrides_plan=False,
-                    bypasses_cooldown=True,
-                ),
-                0.0,
-            )
-
-        # EV SoC target check
-        if (appliance.ev_target_soc is not None
-                and state.ev_soc is not None
-                and state.ev_soc >= appliance.ev_target_soc):
-            action = Action.OFF if state.is_on else Action.IDLE
-            return (
-                ControlDecision(
-                    appliance_id=appliance.id,
-                    action=action,
-                    target_current=None,
-                    reason=f"EV SoC target reached ({state.ev_soc:.0f}% >= {appliance.ev_target_soc:.0f}%)",
-                    overrides_plan=False,
-                    bypasses_cooldown=True,
-                ),
-                0.0,
-            )
-
         # on_only check
         if appliance.on_only and state.is_on:
             return (
                 ControlDecision(
                     appliance_id=appliance.id,
                     action=Action.ON,
-                    target_current=None,
                     reason="on_only appliance - staying on",
                     overrides_plan=False,
                 ),
@@ -335,7 +263,7 @@ class Optimizer:
                 action = Action.OFF if state.is_on else Action.IDLE
                 return (
                     ControlDecision(
-                        appliance_id=appliance.id, action=action, target_current=None,
+                        appliance_id=appliance.id, action=action,
                         reason=f"Dependency '{appliance.requires_appliance}' unavailable (disabled or removed)",
                         overrides_plan=False,
                     ),
@@ -361,7 +289,6 @@ class Optimizer:
                 decisions.append(ControlDecision(
                     appliance_id=appliance.id,
                     action=Action.IDLE,
-                    target_current=None,
                     reason="No state data available",
                     overrides_plan=False,
                 ))
@@ -397,71 +324,22 @@ class Optimizer:
 
         # Already-ON appliances
         if state.is_on:
-            if appliance.dynamic_current and appliance.current_entity:
-                phases = max(appliance.phases, 1)
-                if state.current_power > 0:
-                    current_power = state.current_power
-                elif state.current_amperage is not None and state.current_amperage > 0:
-                    current_power = state.current_amperage * self.grid_voltage * phases
-                else:
-                    current_power = appliance.nominal_power
-                excess_for_adjustment = min(instant_budget, avg_budget)
-                available = excess_for_adjustment + current_power
-                raw_amps = available / (self.grid_voltage * phases)
-                target_amps = _step_floor(raw_amps, appliance.current_step)
-
-                if target_amps < appliance.min_current:
-                    reason = _format_staying_on_dynamic(
-                        current_amperage=state.current_amperage,
-                        current_power=current_power,
-                        off_threshold=self._off_threshold,
-                        instant_budget=instant_budget,
-                    )
-                    return (
-                        ControlDecision(
-                            appliance_id=appliance.id,
-                            action=Action.ON,
-                            target_current=None,
-                            reason=reason,
-                            overrides_plan=False,
-                        ),
-                        0.0,
-                    )
-
-                target_amps = max(appliance.min_current, min(target_amps, appliance.max_current))
-                power_at_target = target_amps * self.grid_voltage * phases
-                power_delta = power_at_target - current_power
-                return (
-                    ControlDecision(
-                        appliance_id=appliance.id,
-                        action=Action.SET_CURRENT,
-                        target_current=target_amps,
-                        reason=f"Dynamic current adjustment: {target_amps:.1f}A ({available:.0f}W available)",
-                        overrides_plan=False,
-                    ),
-                    power_delta,
-                )
-            else:
-                reason = _format_staying_on_standard(
-                    current_power=state.current_power,
-                    off_threshold=self._off_threshold,
-                    instant_budget=instant_budget,
-                )
-                return (
-                    ControlDecision(
-                        appliance_id=appliance.id,
-                        action=Action.ON,
-                        target_current=None,
-                        reason=reason,
-                        overrides_plan=False,
-                    ),
-                    0.0,
-                )
+            reason = _format_staying_on(
+                current_power=state.current_power,
+                off_threshold=self._off_threshold,
+                instant_budget=instant_budget,
+            )
+            return (
+                ControlDecision(
+                    appliance_id=appliance.id,
+                    action=Action.ON,
+                    reason=reason,
+                    overrides_plan=False,
+                ),
+                0.0,
+            )
 
         # Currently OFF appliances
-        if appliance.dynamic_current:
-            return self._allocate_dynamic_current(appliance, state, avg_budget)
-
         return self._allocate_standard(appliance, state, avg_budget)
 
     def _allocate_standard(
@@ -487,7 +365,6 @@ class Optimizer:
             if dep_power > 0:
                 self._pending_dep_decisions[appliance.requires_appliance] = ControlDecision(
                     appliance_id=appliance.requires_appliance, action=Action.ON,
-                    target_current=None,
                     reason=f"Started as dependency for {appliance.name}",
                     overrides_plan=False,
                 )
@@ -496,7 +373,6 @@ class Optimizer:
                 ControlDecision(
                     appliance_id=appliance.id,
                     action=Action.ON,
-                    target_current=None,
                     reason=f"Excess available ({avg_budget:.0f}W >= {power_needed:.0f}W needed)",
                     overrides_plan=False,
                 ),
@@ -507,53 +383,10 @@ class Optimizer:
             ControlDecision(
                 appliance_id=appliance.id,
                 action=Action.IDLE,
-                target_current=None,
                 reason=f"Insufficient excess ({avg_budget:.0f}W < {power_needed:.0f}W needed)",
                 overrides_plan=False,
             ),
             0.0,
-        )
-
-    def _allocate_dynamic_current(
-        self,
-        appliance: ApplianceConfig,
-        state: ApplianceState,
-        avg_budget: float,
-    ) -> tuple[ControlDecision, float]:
-        """Allocate a dynamic current appliance (e.g., EV charger)."""
-        phases = max(appliance.phases, 1)
-        dynamic_buffer = appliance.on_threshold if appliance.on_threshold is not None else DEFAULT_DYNAMIC_ON_THRESHOLD
-        min_watts_needed = appliance.min_current * self.grid_voltage * phases + dynamic_buffer
-
-        if avg_budget < min_watts_needed:
-            return (
-                ControlDecision(
-                    appliance_id=appliance.id,
-                    action=Action.IDLE,
-                    target_current=None,
-                    reason=(
-                        f"Insufficient excess for min current "
-                        f"({avg_budget:.0f}W < {min_watts_needed:.0f}W needed)"
-                    ),
-                    overrides_plan=False,
-                ),
-                0.0,
-            )
-
-        raw_amps = avg_budget / (self.grid_voltage * phases)
-        clamped_amps = _step_floor(raw_amps, appliance.current_step)
-        target_amps = max(appliance.min_current, min(clamped_amps, appliance.max_current))
-        power_consumed = target_amps * self.grid_voltage * phases
-
-        return (
-            ControlDecision(
-                appliance_id=appliance.id,
-                action=Action.SET_CURRENT,
-                target_current=target_amps,
-                reason=f"Dynamic current set to {target_amps:.1f}A ({power_consumed:.0f}W)",
-                overrides_plan=False,
-            ),
-            power_consumed,
         )
 
     def _preempt(
@@ -582,13 +415,8 @@ class Optimizer:
         idle_candidates.sort(key=lambda item: (item[1].priority, item[0]))
 
         for idle_id, idle_app in idle_candidates:
-            if idle_app.dynamic_current and idle_app.current_entity:
-                phases = max(idle_app.phases, 1)
-                dyn_buf = idle_app.on_threshold if idle_app.on_threshold is not None else DEFAULT_DYNAMIC_ON_THRESHOLD
-                power_needed = idle_app.min_current * self.grid_voltage * phases + dyn_buf
-            else:
-                on_buf = idle_app.on_threshold if idle_app.on_threshold is not None else DEFAULT_ON_THRESHOLD
-                power_needed = idle_app.nominal_power + on_buf
+            on_buf = idle_app.on_threshold if idle_app.on_threshold is not None else DEFAULT_ON_THRESHOLD
+            power_needed = idle_app.nominal_power + on_buf
 
             dep_power = 0.0
             dep_id: str | None = None
@@ -599,7 +427,7 @@ class Optimizer:
                     dep_idx = decision_index.get(idle_app.requires_appliance)
                     if dep_idx is not None:
                         dep_decision = decisions[dep_idx]
-                        if dep_decision.action not in (Action.ON, Action.SET_CURRENT):
+                        if dep_decision.action != Action.ON:
                             dep_power = dep_config.nominal_power
                             dep_id = idle_app.requires_appliance
 
@@ -607,7 +435,7 @@ class Optimizer:
 
             preemptable: list[tuple[str, ApplianceConfig, float]] = []
             for decision in decisions:
-                if decision.action not in (Action.ON, Action.SET_CURRENT):
+                if decision.action != Action.ON:
                     continue
                 app = appliance_by_id.get(decision.appliance_id)
                 if app is None:
@@ -622,7 +450,7 @@ class Optimizer:
                     continue
                 if app.id in self._reverse_deps:
                     has_running_dep = any(
-                        d.action in (Action.ON, Action.SET_CURRENT)
+                        d.action == Action.ON
                         for d in decisions
                         if d.appliance_id in self._reverse_deps[app.id]
                     )
@@ -655,7 +483,6 @@ class Optimizer:
                 decisions[idx] = ControlDecision(
                     appliance_id=p_id,
                     action=Action.OFF,
-                    target_current=None,
                     reason=f"Preempted for higher-priority {idle_app.name}",
                     overrides_plan=False,
                 )
@@ -663,28 +490,13 @@ class Optimizer:
                 instant_budget += freed
 
             idle_idx = decision_index[idle_id]
-            if idle_app.dynamic_current and idle_app.current_entity:
-                phases = max(idle_app.phases, 1)
-                raw_amps = avg_budget / (self.grid_voltage * phases)
-                target_amps = _step_floor(raw_amps, idle_app.current_step)
-                target_amps = max(idle_app.min_current, min(target_amps, idle_app.max_current))
-                power_consumed = target_amps * self.grid_voltage * phases
-                decisions[idle_idx] = ControlDecision(
-                    appliance_id=idle_id,
-                    action=Action.SET_CURRENT,
-                    target_current=target_amps,
-                    reason=f"Preemption: dynamic current at {target_amps:.1f}A ({power_consumed:.0f}W)",
-                    overrides_plan=False,
-                )
-            else:
-                power_consumed = idle_app.nominal_power
-                decisions[idle_idx] = ControlDecision(
-                    appliance_id=idle_id,
-                    action=Action.ON,
-                    target_current=None,
-                    reason="Preemption: started after shedding lower-priority appliances",
-                    overrides_plan=False,
-                )
+            power_consumed = idle_app.nominal_power
+            decisions[idle_idx] = ControlDecision(
+                appliance_id=idle_id,
+                action=Action.ON,
+                reason="Preemption: started after shedding lower-priority appliances",
+                overrides_plan=False,
+            )
             avg_budget -= power_consumed
             instant_budget -= power_consumed
 
@@ -693,7 +505,6 @@ class Optimizer:
                 decisions[dep_idx] = ControlDecision(
                     appliance_id=dep_id,
                     action=Action.ON,
-                    target_current=None,
                     reason=f"Started as dependency for {idle_app.name} (preemption)",
                     overrides_plan=False,
                 )
@@ -709,7 +520,7 @@ class Optimizer:
         state_by_id: dict[str, ApplianceState],
         instant_budget: float,
     ) -> float:
-        """Phase 3: SHED - turn off or reduce lowest-priority appliances first."""
+        """Phase 3: SHED - turn off lowest-priority appliances first."""
         if instant_budget >= self._off_threshold:
             return instant_budget
 
@@ -718,7 +529,7 @@ class Optimizer:
 
         candidates: list[tuple[str, ApplianceConfig]] = []
         for decision in decisions:
-            if decision.action not in (Action.ON, Action.SET_CURRENT):
+            if decision.action != Action.ON:
                 continue
             appliance = appliance_by_id.get(decision.appliance_id)
             if appliance is None:
@@ -729,7 +540,7 @@ class Optimizer:
                 continue
             if appliance.id in self._reverse_deps:
                 has_running_dep = any(
-                    d.action in (Action.ON, Action.SET_CURRENT)
+                    d.action == Action.ON
                     for d in decisions
                     if d.appliance_id in self._reverse_deps[appliance.id]
                 )
@@ -744,23 +555,12 @@ class Optimizer:
                 break
 
             idx = decision_index[app_id]
-            current_decision = decisions[idx]
-
-            if appliance.dynamic_current and current_decision.action in (Action.ON, Action.SET_CURRENT):
-                state = state_by_id.get(app_id)
-                new_decision, power_freed = self._shed_dynamic_current(appliance, state, instant_budget)
-                if new_decision is not None:
-                    decisions[idx] = new_decision
-                    instant_budget += power_freed
-                    continue
-
             state = state_by_id.get(app_id)
             freed_power = (state.current_power if state and state.current_power > 0
                            else appliance.nominal_power)
             decisions[idx] = ControlDecision(
                 appliance_id=app_id,
                 action=Action.OFF,
-                target_current=None,
                 reason=f"Shed: insufficient excess (priority {appliance.priority})",
                 overrides_plan=False,
             )
@@ -769,47 +569,8 @@ class Optimizer:
 
         return instant_budget
 
-    def _shed_dynamic_current(
-        self,
-        appliance: ApplianceConfig,
-        state: ApplianceState | None,
-        instant_budget: float,
-    ) -> tuple[ControlDecision | None, float]:
-        """Try to reduce dynamic current on an already-ON appliance."""
-        phases = max(appliance.phases, 1)
 
-        if state is not None and state.current_power > 0:
-            current_power = state.current_power
-        elif state is not None and state.current_amperage is not None and state.current_amperage > 0:
-            current_power = state.current_amperage * self.grid_voltage * phases
-        else:
-            current_power = appliance.nominal_power
-
-        available_power = current_power + instant_budget
-        if available_power <= 0:
-            return None, 0.0
-
-        raw_amps = available_power / (self.grid_voltage * phases)
-        new_amps = _step_floor(raw_amps, appliance.current_step)
-
-        if new_amps < appliance.min_current:
-            return None, 0.0
-
-        new_amps = min(new_amps, appliance.max_current)
-        new_power = new_amps * self.grid_voltage * phases
-        power_freed = current_power - new_power
-
-        decision = ControlDecision(
-            appliance_id=appliance.id,
-            action=Action.SET_CURRENT,
-            target_current=new_amps,
-            reason=f"Shed: reduced current to {new_amps:.1f}A ({new_power:.0f}W)",
-            overrides_plan=False,
-        )
-        return decision, power_freed
-
-
-def _format_staying_on_standard(
+def _format_staying_on(
     *,
     current_power: float,
     off_threshold: float,
@@ -819,31 +580,6 @@ def _format_staying_on_standard(
     remaining_sign = "-" if instant_budget < 0 else "+"
     text = (
         f"Staying on ({current_power:.0f}W drawn) - "
-        f"shed at {threshold_sign}{abs(off_threshold):.0f}W "
-        f"(current: {remaining_sign}{abs(instant_budget):.0f}W)"
-    )
-    if instant_budget < off_threshold:
-        text += " (shed imminent)"
-    return text
-
-
-def _format_staying_on_dynamic(
-    *,
-    current_amperage: float | None,
-    current_power: float,
-    off_threshold: float,
-    instant_budget: float,
-) -> str:
-    if current_amperage is None:
-        return _format_staying_on_standard(
-            current_power=current_power,
-            off_threshold=off_threshold,
-            instant_budget=instant_budget,
-        )
-    threshold_sign = "-" if off_threshold < 0 else "+"
-    remaining_sign = "-" if instant_budget < 0 else "+"
-    text = (
-        f"Staying on at {current_amperage:.1f}A ({current_power:.0f}W drawn) - "
         f"shed at {threshold_sign}{abs(off_threshold):.0f}W "
         f"(current: {remaining_sign}{abs(instant_budget):.0f}W)"
     )

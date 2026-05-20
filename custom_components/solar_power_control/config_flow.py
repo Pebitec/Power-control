@@ -1,7 +1,7 @@
-"""Config flow for PV Excess Control integration.
+"""Config flow for Solar Power Control integration.
 
 Multi-step config flow that collects:
-1. Sensor mapping (PV, grid, load sensors) + grid voltage
+1. Sensor mapping (PV, grid, load sensors)
 2. Global settings (controller interval, off threshold, preemption)
 
 Also provides ApplianceSubentryFlow for managing appliances as subentries.
@@ -45,37 +45,24 @@ from .const import (
     CONF_AVERAGING_WINDOW,
     CONF_COMPLETION_POWER_THRESHOLD,
     CONF_CONTROLLER_INTERVAL,
-    CONF_CURRENT_ENTITY,
-    CONF_CURRENT_STEP,
-    CONF_DYNAMIC_CURRENT,
     CONF_ENABLE_PREEMPTION,
-    CONF_EV_CONNECTED_ENTITY,
-    CONF_EV_SOC_ENTITY,
-    CONF_EV_TARGET_SOC,
     CONF_GRID_EXPORT,
-    CONF_GRID_VOLTAGE,
     CONF_HELPER_ONLY,
     CONF_IMPORT_EXPORT,
     CONF_LOAD_POWER,
-    CONF_MAX_CURRENT,
-    CONF_MIN_CURRENT,
     CONF_NOMINAL_POWER,
     CONF_OFF_THRESHOLD,
     CONF_ON_ONLY,
     CONF_ON_THRESHOLD,
-    CONF_PHASES,
     CONF_PROTECT_FROM_PREEMPTION,
     CONF_PV_POWER,
     CONF_REQUIRES_APPLIANCE,
     CONF_SWITCH_INTERVAL,
     DEFAULT_CONTROLLER_INTERVAL,
-    DEFAULT_GRID_VOLTAGE,
     DEFAULT_OFF_THRESHOLD,
     DEFAULT_SWITCH_INTERVAL,
     DOMAIN,
-    MAX_CURRENT,
     MAX_PRIORITY,
-    MIN_CURRENT,
     MIN_PRIORITY,
 )
 
@@ -89,26 +76,12 @@ CONTROLLER_INTERVAL_OPTIONS = [
     {"value": "60", "label": "60 seconds"},
 ]
 
-PHASE_OPTIONS = [
-    {"value": "1", "label": "1 Phase"},
-    {"value": "2", "label": "2 Phases"},
-    {"value": "3", "label": "3 Phases"},
-]
-
 SENSOR_ENTITY_SELECTOR = EntitySelector(
     EntitySelectorConfig(domain=["sensor", "input_number"])
 )
 
-NUMBER_ENTITY_SELECTOR = EntitySelector(
-    EntitySelectorConfig(domain=["number", "input_number"])
-)
-
 SWITCH_ENTITY_SELECTOR = EntitySelector(
     EntitySelectorConfig(domain=["switch", "input_boolean", "light", "climate", "fan"])
-)
-
-BINARY_SENSOR_ENTITY_SELECTOR = EntitySelector(
-    EntitySelectorConfig(domain="binary_sensor")
 )
 
 
@@ -132,18 +105,6 @@ def _sensor_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                 CONF_LOAD_POWER,
                 description={"suggested_value": d.get(CONF_LOAD_POWER)},
             ): SENSOR_ENTITY_SELECTOR,
-            vol.Required(
-                CONF_GRID_VOLTAGE,
-                default=d.get(CONF_GRID_VOLTAGE, DEFAULT_GRID_VOLTAGE),
-            ): NumberSelector(
-                NumberSelectorConfig(
-                    min=100,
-                    max=500,
-                    step=1,
-                    unit_of_measurement="V",
-                    mode=NumberSelectorMode.BOX,
-                )
-            ),
         }
     )
 
@@ -220,88 +181,6 @@ def _appliance_basic_schema(defaults: dict[str, Any] | None = None) -> vol.Schem
                 CONF_ACTUAL_POWER_ENTITY,
                 description={"suggested_value": d.get(CONF_ACTUAL_POWER_ENTITY)},
             ): SENSOR_ENTITY_SELECTOR,
-            vol.Required(
-                CONF_PHASES,
-                default=str(d.get(CONF_PHASES, 1)),
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=PHASE_OPTIONS,
-                    mode=SelectSelectorMode.DROPDOWN,
-                )
-            ),
-        }
-    )
-
-
-def _appliance_current_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
-    d = defaults or {}
-    return vol.Schema(
-        {
-            vol.Required(
-                CONF_DYNAMIC_CURRENT,
-                default=d.get(CONF_DYNAMIC_CURRENT, False),
-            ): BooleanSelector(),
-            vol.Optional(
-                CONF_CURRENT_ENTITY,
-                description={"suggested_value": d.get(CONF_CURRENT_ENTITY)},
-            ): NUMBER_ENTITY_SELECTOR,
-            vol.Optional(
-                CONF_MIN_CURRENT,
-                default=d.get(CONF_MIN_CURRENT, 6.0),
-            ): NumberSelector(
-                NumberSelectorConfig(
-                    min=MIN_CURRENT,
-                    max=MAX_CURRENT,
-                    step=0.1,
-                    unit_of_measurement="A",
-                    mode=NumberSelectorMode.BOX,
-                )
-            ),
-            vol.Optional(
-                CONF_MAX_CURRENT,
-                default=d.get(CONF_MAX_CURRENT, 16.0),
-            ): NumberSelector(
-                NumberSelectorConfig(
-                    min=MIN_CURRENT,
-                    max=MAX_CURRENT,
-                    step=0.1,
-                    unit_of_measurement="A",
-                    mode=NumberSelectorMode.BOX,
-                )
-            ),
-            vol.Optional(
-                CONF_CURRENT_STEP,
-                default=d.get(CONF_CURRENT_STEP, 0.1),
-            ): NumberSelector(
-                NumberSelectorConfig(
-                    min=0.1,
-                    max=1.0,
-                    step=0.1,
-                    unit_of_measurement="A",
-                    mode=NumberSelectorMode.BOX,
-                )
-            ),
-            vol.Optional(
-                CONF_EV_SOC_ENTITY,
-                description={"suggested_value": d.get(CONF_EV_SOC_ENTITY)},
-            ): SENSOR_ENTITY_SELECTOR,
-            vol.Optional(
-                CONF_EV_CONNECTED_ENTITY,
-                description={"suggested_value": d.get(CONF_EV_CONNECTED_ENTITY)},
-            ): BINARY_SENSOR_ENTITY_SELECTOR,
-            vol.Optional(
-                CONF_EV_TARGET_SOC,
-                default=d.get(CONF_EV_TARGET_SOC, 100),
-                description={"suggested_value": d.get(CONF_EV_TARGET_SOC)},
-            ): NumberSelector(
-                NumberSelectorConfig(
-                    min=0,
-                    max=100,
-                    step=1,
-                    unit_of_measurement="%",
-                    mode=NumberSelectorMode.SLIDER,
-                )
-            ),
         }
     )
 
@@ -391,8 +270,8 @@ def _appliance_constraints_schema(
     return vol.Schema(schema_dict)
 
 
-class PvExcessControlConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for PV Excess Control."""
+class SolarPowerControlConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for Solar Power Control."""
 
     VERSION = 1
 
@@ -441,7 +320,7 @@ class PvExcessControlConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             user_input[CONF_CONTROLLER_INTERVAL] = controller_interval
             self.data.update(user_input)
-            return self.async_create_entry(title="PV Excess Control", data=self.data)
+            return self.async_create_entry(title="Solar Power Control", data=self.data)
 
         return self.async_show_form(
             step_id="settings",
@@ -461,12 +340,12 @@ class PvExcessControlConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
-    ) -> PvExcessControlOptionsFlow:
-        return PvExcessControlOptionsFlow()
+    ) -> SolarPowerControlOptionsFlow:
+        return SolarPowerControlOptionsFlow()
 
 
-class PvExcessControlOptionsFlow(config_entries.OptionsFlow):
-    """Handle options flow for PV Excess Control."""
+class SolarPowerControlOptionsFlow(config_entries.OptionsFlow):
+    """Handle options flow for Solar Power Control."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -542,8 +421,7 @@ class ApplianceSubentryFlowHandler(_SubentryBase):  # type: ignore[misc]
 
     Steps:
       1. user        - Basic info + power profile
-      2. current     - Dynamic current + EV settings
-      3. constraints - Switch interval, on-only, preemption protection, dependencies
+      2. constraints - Switch interval, on-only, preemption protection, dependencies
     """
 
     def __init__(self) -> None:
@@ -573,12 +451,11 @@ class ApplianceSubentryFlowHandler(_SubentryBase):  # type: ignore[misc]
                 errors[CONF_NOMINAL_POWER] = "invalid_power"
 
             if not errors:
-                user_input[CONF_PHASES] = int(user_input.get(CONF_PHASES, "1"))
                 user_input[CONF_APPLIANCE_PRIORITY] = int(
                     user_input.get(CONF_APPLIANCE_PRIORITY, 500)
                 )
                 self._data.update(user_input)
-                return await self.async_step_current()
+                return await self.async_step_constraints()
 
         form_defaults = {**self._data, **(user_input or {})}
         return self.async_show_form(
@@ -589,43 +466,7 @@ class ApplianceSubentryFlowHandler(_SubentryBase):  # type: ignore[misc]
         )
 
     # ------------------------------------------------------------------
-    # Step 2: Dynamic Current + EV Settings
-    # ------------------------------------------------------------------
-
-    async def async_step_current(
-        self, user_input: dict[str, Any] | None = None
-    ) -> SubentryFlowResult:
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            dynamic = user_input.get(CONF_DYNAMIC_CURRENT, False)
-            if dynamic:
-                if not user_input.get(CONF_CURRENT_ENTITY):
-                    errors[CONF_CURRENT_ENTITY] = "missing_current_entity"
-
-                min_c = user_input.get(CONF_MIN_CURRENT, 6.0)
-                max_c = user_input.get(CONF_MAX_CURRENT, 16.0)
-                if min_c >= max_c:
-                    errors[CONF_MIN_CURRENT] = "invalid_current_range"
-
-            if not errors:
-                self._data.update(user_input)
-                for key in [CONF_CURRENT_ENTITY, CONF_EV_SOC_ENTITY,
-                            CONF_EV_CONNECTED_ENTITY, CONF_EV_TARGET_SOC]:
-                    if key not in user_input:
-                        self._data.pop(key, None)
-                return await self.async_step_constraints()
-
-        form_defaults = {**self._data, **(user_input or {})}
-        return self.async_show_form(
-            step_id="current",
-            data_schema=_appliance_current_schema(form_defaults),
-            errors=errors,
-            last_step=False,
-        )
-
-    # ------------------------------------------------------------------
-    # Step 3: Constraints
+    # Step 2: Constraints
     # ------------------------------------------------------------------
 
     async def async_step_constraints(
@@ -680,8 +521,6 @@ class ApplianceSubentryFlowHandler(_SubentryBase):  # type: ignore[misc]
         subentry = self._get_reconfigure_subentry()
         self._data = dict(subentry.data)
         self._subentry_id = getattr(subentry, "subentry_id", None) or getattr(subentry, "id", None)
-        if CONF_PHASES in self._data:
-            self._data[CONF_PHASES] = str(self._data[CONF_PHASES])
         return await self.async_step_reconfigure_basic(None)
 
     async def async_step_reconfigure_basic(
@@ -698,48 +537,16 @@ class ApplianceSubentryFlowHandler(_SubentryBase):  # type: ignore[misc]
                 errors[CONF_NOMINAL_POWER] = "invalid_power"
 
             if not errors:
-                user_input[CONF_PHASES] = int(user_input.get(CONF_PHASES, "1"))
                 user_input[CONF_APPLIANCE_PRIORITY] = int(
                     user_input.get(CONF_APPLIANCE_PRIORITY, 500)
                 )
                 self._data.update(user_input)
-                return await self.async_step_reconfigure_current()
+                return await self.async_step_reconfigure_constraints()
 
         form_defaults = {**self._data, **(user_input or {})}
         return self.async_show_form(
             step_id="reconfigure_basic",
             data_schema=_appliance_basic_schema(form_defaults),
-            errors=errors,
-            last_step=False,
-        )
-
-    async def async_step_reconfigure_current(
-        self, user_input: dict[str, Any] | None = None
-    ) -> SubentryFlowResult:
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            dynamic = user_input.get(CONF_DYNAMIC_CURRENT, False)
-            if dynamic:
-                if not user_input.get(CONF_CURRENT_ENTITY):
-                    errors[CONF_CURRENT_ENTITY] = "missing_current_entity"
-                min_c = user_input.get(CONF_MIN_CURRENT, 6.0)
-                max_c = user_input.get(CONF_MAX_CURRENT, 16.0)
-                if min_c >= max_c:
-                    errors[CONF_MIN_CURRENT] = "invalid_current_range"
-
-            if not errors:
-                self._data.update(user_input)
-                for key in [CONF_CURRENT_ENTITY, CONF_EV_SOC_ENTITY,
-                            CONF_EV_CONNECTED_ENTITY, CONF_EV_TARGET_SOC]:
-                    if key not in user_input:
-                        self._data.pop(key, None)
-                return await self.async_step_reconfigure_constraints()
-
-        form_defaults = {**self._data, **(user_input or {})}
-        return self.async_show_form(
-            step_id="reconfigure_current",
-            data_schema=_appliance_current_schema(form_defaults),
             errors=errors,
             last_step=False,
         )
