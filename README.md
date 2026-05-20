@@ -2,7 +2,7 @@
 
 **A Home Assistant integration that automatically turns on your appliances when your solar panels produce surplus power.**
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/pebitec/power-control)
 [![HA Version](https://img.shields.io/badge/HA-2025.8%2B-blue)](https://www.home-assistant.io)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
@@ -15,8 +15,6 @@ No batteries, no tariff schedules, no 24-hour planners — just straightforward 
 ## Features
 
 - **Priority-based control** — assign each appliance a priority (1–1000); lower number = higher priority. High-priority appliances get power first.
-- **Dynamic current for EV chargers** — continuously adjusts the charging current (6–32 A) to use exactly as much surplus as is available, rather than all-or-nothing switching.
-- **EV-aware charging** — stops when the EV reaches a target state of charge or when the car disconnects.
 - **Preemption** — optionally shed lower-priority appliances to start a higher-priority one when there is not quite enough surplus for both.
 - **Switch interval** — configurable cooldown between state changes to protect appliances from rapid cycling.
 - **Averaging window** — smooths out short-term fluctuations before making decisions, configurable per appliance.
@@ -40,7 +38,7 @@ No batteries, no tariff schedules, no 24-hour planners — just straightforward 
 
 1. Open HACS in your Home Assistant sidebar
 2. Click the three-dot menu → **Custom repositories**
-3. Add this repository URL as an **Integration**
+3. Add `https://github.com/pebitec/power-control` as an **Integration**
 4. Search for **Solar Power Control** and click **Download**
 5. Restart Home Assistant
 6. Go to **Settings → Devices & Services → Add Integration** and search for **Solar Power Control**
@@ -62,12 +60,14 @@ Go to **Settings → Devices & Services → Add Integration → Solar Power Cont
 | Field | Description |
 |---|---|
 | PV Production Power Sensor | Your inverter's current output in W or kW |
-| Grid Export Power Sensor | Power currently exported to the grid |
+| Grid Export Power Sensor | Power currently exported to the grid (positive = export) |
 | Combined Import/Export Sensor | Single sensor: positive = export, negative = import |
-| Load Power Sensor | Total household consumption |
-| Grid Voltage | Your local grid voltage (default 230 V) |
+| Load Power Sensor | Total household consumption in W or kW |
+| Invert Combined Import/Export Sensor | Enable if your meter reports positive = import, negative = export |
 
 You need to provide the PV sensor and at least one of the grid/load sensors. The integration supports both W and kW sensors and converts automatically.
+
+> **Tip:** If your meter reports buying power as a positive number and solar export as a negative number, enable **Invert Combined Import/Export Sensor**.
 
 **Step 2 — Settings**
 
@@ -79,7 +79,7 @@ You need to provide the PV sensor and at least one of the grid/load sensors. The
 
 ### 2. Add appliances
 
-After the integration is set up, click **Configure** and then **Add Appliance** (the subentry button). Repeat for each appliance.
+After the integration is set up, click **Configure** and then **Add Appliance**. Repeat for each appliance.
 
 **Step 1 — Basic info**
 
@@ -90,24 +90,8 @@ After the integration is set up, click **Configure** and then **Add Appliance** 
 | Priority | 1–1000, lower = higher priority |
 | Nominal Power | Rated consumption in watts |
 | Actual Power Sensor | Optional — for accurate analytics |
-| Phases | 1, 2 or 3 (relevant for EV chargers) |
 
-**Step 2 — Dynamic current (EV chargers)**
-
-Leave **Dynamic Current** disabled for simple on/off appliances (dishwasher, water heater, etc.).
-
-Enable it for EV chargers and wallboxes:
-
-| Field | Description |
-|---|---|
-| Current Control Entity | The `number` entity that sets charging amps |
-| Min / Max Current | Operating range in amperes |
-| Step Size | Resolution of adjustments (0.1 A or 1.0 A) |
-| EV SoC Sensor | Battery level sensor — stops charging at target |
-| EV Connected Sensor | Binary sensor — stops charging when unplugged |
-| EV Target SoC | Stop at this charge level (%) |
-
-**Step 3 — Constraints**
+**Step 2 — Constraints**
 
 | Field | Default | Description |
 |---|---|---|
@@ -149,7 +133,7 @@ The integration also creates global entities:
 Every cycle the optimizer runs three phases:
 
 1. **Assess** — calculate the average excess power from recent history. If fewer than 3 samples are available (startup), only safety rules apply.
-2. **Allocate** — iterate through appliances in priority order. Turn on each one if the average surplus covers its consumption plus the activation buffer. For dynamic-current appliances, calculate and set the optimal current.
+2. **Allocate** — iterate through appliances in priority order. Turn on each one if the average surplus covers its consumption plus the activation buffer.
 3. **Shed** — if the instantaneous surplus falls below the shed threshold (default −50 W), turn off the lowest-priority appliances until the balance is restored.
 
 Between phases 2 and 3, **preemption** can shed a lower-priority ON appliance to free up enough power to start a higher-priority IDLE one.
@@ -158,7 +142,8 @@ Between phases 2 and 3, **preemption** can shed a lower-priority ON appliance to
 
 The integration calculates surplus as follows:
 
-- **Combined import/export sensor** (e.g. `sensor.grid_power` where positive = export): surplus = sensor value
+- **Combined import/export sensor** (positive = export): surplus = sensor value
+- **Inverted combined sensor** (positive = import): surplus = −sensor value
 - **Separate grid export sensor**: surplus = export value (positive means sending to grid)
 - **PV + load sensors**: surplus = PV production − load
 
