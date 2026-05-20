@@ -1,0 +1,240 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Sensor Mapping",
+        "description": "Map your Home Assistant sensors to Solar Power Control. You must provide at least one of: Grid Export, Combined Import/Export, or Load Power.",
+        "data": {
+          "pv_power": "PV Production Power Sensor",
+          "grid_export": "Grid Export Power Sensor",
+          "import_export_power": "Combined Import/Export Power Sensor",
+          "load_power": "Load Power Sensor",
+          "grid_voltage": "Grid Voltage (V)"
+        },
+        "data_description": {
+          "pv_power": "Sensor that reports your current PV production (W or kW — automatically converted).",
+          "grid_export": "Sensor that reports power exported to the grid (W or kW — automatically converted).",
+          "import_export_power": "Combined sensor where positive = export, negative = import (W or kW — automatically converted). Use this instead of Grid Export if your inverter provides a single combined sensor.",
+          "load_power": "Sensor that reports your total household load (W or kW — automatically converted). When provided, excess is calculated as PV production minus load.",
+          "grid_voltage": "Your local grid voltage (typically 230 V in Europe, 120 V in North America). Used for dynamic current calculations."
+        }
+      },
+      "settings": {
+        "title": "Settings",
+        "description": "Configure update interval and control behaviour.",
+        "data": {
+          "off_threshold": "Shed Threshold (W)",
+          "controller_interval": "Controller Update Interval",
+          "enable_preemption": "Enable Priority Preemption"
+        },
+        "data_description": {
+          "off_threshold": "How far into negative excess (W) the controller tolerates before starting to shed appliances. Default: -50 W.",
+          "controller_interval": "How often the controller reads sensors and adjusts appliances.",
+          "enable_preemption": "When enabled, the optimizer can shed lower-priority appliances to free up power for higher-priority ones."
+        }
+      }
+    },
+    "error": {
+      "no_grid_sensor": "You must configure at least one of: Grid Export sensor, Combined Import/Export sensor, or Load Power sensor."
+    },
+    "abort": {
+      "already_configured": "Solar Power Control is already configured."
+    }
+  },
+  "config_subentries": {
+    "appliance": {
+      "title": "Appliance",
+      "description": "Add an appliance to be controlled based on surplus solar power.",
+      "step": {
+        "user": {
+          "title": "Add Appliance",
+          "description": "Configure the basic information and power profile for this appliance.",
+          "data": {
+            "appliance_name": "Appliance Name",
+            "appliance_entity": "Appliance Entity",
+            "appliance_priority": "Priority (1-1000)",
+            "nominal_power": "Nominal Power (W)",
+            "actual_power_entity": "Actual Power Sensor",
+            "phases": "Number of Phases"
+          },
+          "data_description": {
+            "appliance_name": "A friendly name for this appliance.",
+            "appliance_entity": "The switch, light, climate or other controllable entity.",
+            "appliance_priority": "Lower number = higher priority. Appliances with higher priority receive surplus power first.",
+            "nominal_power": "The rated power consumption of this appliance in watts.",
+            "actual_power_entity": "Optional sensor that reports actual power draw (W or kW — automatically converted). Used for more accurate analytics.",
+            "phases": "Number of electrical phases this appliance uses. Relevant for dynamic current calculations."
+          }
+        },
+        "current": {
+          "title": "Dynamic Current Settings",
+          "description": "Configure dynamic current control for variable-power appliances such as EV chargers.",
+          "data": {
+            "dynamic_current": "Enable Dynamic Current Control",
+            "current_entity": "Current Control Entity",
+            "min_current": "Minimum Current (A)",
+            "max_current": "Maximum Current (A)",
+            "current_step": "Current Step Size (A)",
+            "ev_soc_entity": "EV State of Charge Sensor",
+            "ev_connected_entity": "EV Connected Sensor",
+            "ev_target_soc": "EV Target State of Charge (%)"
+          },
+          "data_description": {
+            "dynamic_current": "Enable to control this appliance by adjusting its charging current rather than simple on/off.",
+            "current_entity": "Number entity used to set the charging current (e.g., input_number or number from your charger integration).",
+            "min_current": "Minimum operating current in amperes. The appliance will turn off rather than drop below this level.",
+            "max_current": "Maximum operating current in amperes.",
+            "current_step": "Resolution of current adjustments. Use 0.1 A for fine-grained control or 1.0 A for whole-amp steps.",
+            "ev_soc_entity": "Sensor that reports the EV battery state of charge in percent.",
+            "ev_connected_entity": "Binary sensor that indicates whether the EV is plugged in. Charging stops when disconnected.",
+            "ev_target_soc": "Stop charging when the EV reaches this state of charge."
+          }
+        },
+        "constraints": {
+          "title": "Constraints",
+          "description": "Configure switch interval, activation threshold, and appliance dependencies.",
+          "data": {
+            "switch_interval": "Minimum Switch Interval (s)",
+            "averaging_window": "Averaging Window (s)",
+            "on_only": "On Only (never turn off automatically)",
+            "protect_from_preemption": "Protect From Preemption",
+            "on_threshold": "Activation Buffer (W)",
+            "completion_power_threshold": "Completion Power Threshold (W)",
+            "requires_appliance": "Requires Appliance",
+            "helper_only": "Run Only as Helper"
+          },
+          "data_description": {
+            "switch_interval": "Minimum time in seconds between switching this appliance on and off. Prevents rapid cycling.",
+            "averaging_window": "Custom time window in seconds over which excess power is averaged before making decisions. Leave empty to use the default rolling window.",
+            "on_only": "When enabled, the integration will turn this appliance on when surplus is available but will never turn it off automatically.",
+            "protect_from_preemption": "When enabled, this appliance will not be shed to make room for a higher-priority appliance.",
+            "on_threshold": "Additional surplus power (watts) required above the appliance's rated consumption before activation. Leave empty for the default (200 W).",
+            "completion_power_threshold": "When actual power drops below this threshold the appliance is considered done and runtime tracking pauses. Leave empty to disable.",
+            "requires_appliance": "Select an appliance that must already be running before this one can start. For example, a pool heat pump that requires the circulation pump.",
+            "helper_only": "When enabled, this appliance only starts when another appliance lists it as its required dependency. It never starts on its own."
+          }
+        },
+        "reconfigure_basic": {
+          "title": "Edit Appliance",
+          "description": "Update the basic information and power profile for this appliance.",
+          "data": {
+            "appliance_name": "Appliance Name",
+            "appliance_entity": "Appliance Entity",
+            "appliance_priority": "Priority (1-1000)",
+            "nominal_power": "Nominal Power (W)",
+            "actual_power_entity": "Actual Power Sensor",
+            "phases": "Number of Phases"
+          },
+          "data_description": {
+            "appliance_name": "A friendly name for this appliance.",
+            "appliance_entity": "The switch, light, climate or other controllable entity.",
+            "appliance_priority": "Lower number = higher priority. Appliances with higher priority receive surplus power first.",
+            "nominal_power": "The rated power consumption of this appliance in watts.",
+            "actual_power_entity": "Optional sensor that reports actual power draw (W or kW — automatically converted).",
+            "phases": "Number of electrical phases this appliance uses."
+          }
+        },
+        "reconfigure_current": {
+          "title": "Edit Dynamic Current Settings",
+          "description": "Update dynamic current control settings.",
+          "data": {
+            "dynamic_current": "Enable Dynamic Current Control",
+            "current_entity": "Current Control Entity",
+            "min_current": "Minimum Current (A)",
+            "max_current": "Maximum Current (A)",
+            "current_step": "Current Step Size (A)",
+            "ev_soc_entity": "EV State of Charge Sensor",
+            "ev_connected_entity": "EV Connected Sensor",
+            "ev_target_soc": "EV Target State of Charge (%)"
+          },
+          "data_description": {
+            "dynamic_current": "Enable to control this appliance by adjusting its charging current rather than simple on/off.",
+            "current_entity": "Number entity used to set the charging current.",
+            "min_current": "Minimum operating current in amperes.",
+            "max_current": "Maximum operating current in amperes.",
+            "current_step": "Resolution of current adjustments.",
+            "ev_soc_entity": "Sensor that reports the EV battery state of charge in percent.",
+            "ev_connected_entity": "Binary sensor that indicates whether the EV is plugged in.",
+            "ev_target_soc": "Stop charging when the EV reaches this state of charge."
+          }
+        },
+        "reconfigure_constraints": {
+          "title": "Edit Constraints",
+          "description": "Update switch interval, activation threshold, and appliance dependencies.",
+          "data": {
+            "switch_interval": "Minimum Switch Interval (s)",
+            "averaging_window": "Averaging Window (s)",
+            "on_only": "On Only (never turn off automatically)",
+            "protect_from_preemption": "Protect From Preemption",
+            "on_threshold": "Activation Buffer (W)",
+            "completion_power_threshold": "Completion Power Threshold (W)",
+            "requires_appliance": "Requires Appliance",
+            "helper_only": "Run Only as Helper"
+          },
+          "data_description": {
+            "switch_interval": "Minimum time in seconds between switching this appliance on and off.",
+            "averaging_window": "Custom time window in seconds over which excess power is averaged. Leave empty to use the default.",
+            "on_only": "When enabled, the integration will turn this appliance on but never off automatically.",
+            "protect_from_preemption": "When enabled, this appliance will not be shed to make room for a higher-priority appliance.",
+            "on_threshold": "Additional surplus power required above rated consumption before activation. Leave empty for the default (200 W).",
+            "completion_power_threshold": "When actual power drops below this threshold the appliance is considered done. Leave empty to disable.",
+            "requires_appliance": "Select an appliance that must already be running before this one can start.",
+            "helper_only": "When enabled, this appliance only starts when another appliance lists it as its required dependency."
+          }
+        }
+      },
+      "error": {
+        "missing_name": "Appliance name is required.",
+        "missing_entity": "An appliance entity must be selected.",
+        "invalid_power": "Nominal power must be greater than 0.",
+        "missing_current_entity": "A current control entity is required when dynamic current is enabled.",
+        "invalid_current_range": "Minimum current must be less than maximum current.",
+        "circular_dependency": "Circular dependency: the selected appliance already depends on this one.",
+        "helper_only_with_requires": "An appliance cannot be both a helper and have its own dependency. Either clear 'Requires Appliance' or uncheck 'Run Only as Helper'."
+      },
+      "abort": {
+        "reconfigure_successful": "Appliance configuration updated successfully.",
+        "reconfigure_not_supported": "Reconfigure is not supported on this Home Assistant version. Please delete and re-add the appliance."
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "user": {
+        "title": "Sensor Mapping",
+        "description": "Update your sensor mappings and grid voltage.",
+        "data": {
+          "pv_power": "PV Production Power Sensor",
+          "grid_export": "Grid Export Power Sensor",
+          "import_export_power": "Combined Import/Export Power Sensor",
+          "load_power": "Load Power Sensor",
+          "grid_voltage": "Grid Voltage (V)"
+        },
+        "data_description": {
+          "pv_power": "Sensor that reports your current PV production (W or kW — automatically converted).",
+          "grid_export": "Sensor that reports power exported to the grid (W or kW — automatically converted).",
+          "import_export_power": "Combined sensor where positive = export, negative = import (W or kW — automatically converted).",
+          "load_power": "Sensor that reports your total household load (W or kW — automatically converted).",
+          "grid_voltage": "Your local grid voltage. Used for dynamic current calculations."
+        }
+      },
+      "settings": {
+        "title": "Settings",
+        "description": "Update update interval and control behaviour.",
+        "data": {
+          "off_threshold": "Shed Threshold (W)",
+          "controller_interval": "Controller Update Interval",
+          "enable_preemption": "Enable Priority Preemption"
+        },
+        "data_description": {
+          "off_threshold": "How far into negative excess (W) the controller tolerates before starting to shed appliances. Default: -50 W.",
+          "controller_interval": "How often the controller reads sensors and adjusts appliances.",
+          "enable_preemption": "When enabled, the optimizer can shed lower-priority appliances to free up power for higher-priority ones."
+        }
+      }
+    },
+    "error": {
+      "no_grid_sensor": "You must configure at least one of: Grid Export sensor, Combined Import/Export sensor, or Load Power sensor."
+    }
+  }
+}

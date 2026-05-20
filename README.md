@@ -1,145 +1,167 @@
-<!-- IF YOU EDIT THIS FILE, also update README.de.md -->
-<p align="center"><a href="README.de.md">Deutsch</a> · English</p>
+# Solar Power Control
 
-# PV Excess Control
-
-**A comprehensive Home Assistant integration for intelligent solar excess power optimization and cheap grid tariff management.**
+**A Home Assistant integration that automatically turns on your appliances when your solar panels produce surplus power.**
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![HA Version](https://img.shields.io/badge/HA-2025.8%2B-blue)](https://www.home-assistant.io)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa)](https://github.com/sponsors/InventoCasa)
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-%E2%98%95-FFDD00)](https://buymeacoffee.com/henrikic)
 
+## What it does
 
-## About
+Solar Power Control reads your inverter's power sensors every 30 seconds and decides which appliances to run based on how much surplus solar energy is currently available. When your panels produce more than your home consumes, the integration turns on appliances in priority order. When the surplus drops, it turns them off again.
 
-PV Excess Control is built and maintained by Henrik Wasserfuhr, founder of [**InventoCasa**](https://inventocasa.de). We are specialized smart home integrators, designing and deploying complete Home Assistant environments for new builds, renovations, and retrofits.
-
-This integration is open source because I believe in giving back to the community that makes Home Assistant great. It’s also a core component I use in my professional builds. If you want a complete smart home designed, configured, and commissioned from start to finish, InventoCasa takes on a limited number of custom projects each year.
-
-→ [inventocasa.de](https://inventocasa.de) - Bring your smart home vision to life
+No batteries, no tariff schedules, no 24-hour planners — just straightforward solar surplus control.
 
 ## Features
 
-### Core Optimization & Planning
-- **Smart Planning** - 24-hour forward-looking optimizer with weather-aware pre-planning and configurable plan influence.
-- **Priority-Based Appliance Control** - Manage multiple appliances with configurable priorities (1-1000).
-- **Opportunity Cost** - Factors in feed-in tariff revenue when making decisions.
-- **Appliance Dependencies** - Chain appliances so one only runs when another is active.
-- **Per-Appliance Averaging Window** - Custom smoothing period per appliance for excess power calculations.
-- **Min/Max Runtime & Time Windows** - Ensure appliances run for required durations and restrict them to specific hours.
-
-### EV & Battery Management
-- **EV SoC-Aware Charging** - Considers EV battery level, connection status, and user-defined targets.
-- **Schedule Deadlines** - Set constraints like "EV must be charged by 7am".
-- **Dynamic Current Control** - Variable amperage for EV chargers and wallboxes (6-32 A).
-- **Battery-Aware Optimization** - Three strategies: Battery First, Appliance First, Balanced.
-- **Minimum Battery SoC Protection** - Shed appliances when battery level drops below a configured threshold.
-- **Battery Discharge Protection** - Limit discharge rate when big consumers are running.
-
-### Tariffs & Grid
-- **Tariff Integration** - Support for Tibber, Awattar, Nordpool, Octopus Energy, and generic price sensors.
-- **Export Limit Management** - Absorb would-be-curtailed power when feed-in caps apply.
-- **Grid Supplementation** - Allow a small amount of grid power to top up appliances.
-
-### UI, Analytics & Integrations
-- **Solar Forecast Integration** - Solcast, Forecast.Solar, and generic forecast sensors.
-- **Extensive Dashboard Examples** — Build your own dashboard with Mushroom, ApexCharts and other community cards. [Full YAML examples included](docs/dashboard-examples.md).
-- **Self-Consumption Analytics** - Track savings, self-consumption ratio, energy statistics.
-- **Manual Override** - Force appliances on/off from the dashboard.
-- **Configurable Notifications** - Per-event toggles for appliance changes, daily summaries, warnings.
+- **Priority-based control** — assign each appliance a priority (1–1000); lower number = higher priority. High-priority appliances get power first.
+- **Dynamic current for EV chargers** — continuously adjusts the charging current (6–32 A) to use exactly as much surplus as is available, rather than all-or-nothing switching.
+- **EV-aware charging** — stops when the EV reaches a target state of charge or when the car disconnects.
+- **Preemption** — optionally shed lower-priority appliances to start a higher-priority one when there is not quite enough surplus for both.
+- **Switch interval** — configurable cooldown between state changes to protect appliances from rapid cycling.
+- **Averaging window** — smooths out short-term fluctuations before making decisions, configurable per appliance.
+- **Appliance dependencies** — require one appliance to be running before another starts (e.g. pool pump before heat pump).
+- **Helper appliances** — appliances that only run when another appliance needs them.
+- **Per-appliance enable/disable switches** — disable individual appliances from the HA dashboard without removing them.
+- **Manual override switches** — force an appliance on regardless of surplus level.
+- **Analytics sensors** — runtime today, energy today, self-consumption ratio, estimated savings.
 
 ## Requirements
 
 - Home Assistant 2025.8 or newer
-- A solar inverter with power sensors exposed to Home Assistant
-- [HACS](https://hacs.xyz/) for the recommended installation method
+- A solar inverter with at least one power sensor visible in Home Assistant:
+  - PV production power sensor, **and**
+  - grid export sensor **or** combined import/export sensor **or** load power sensor
+- [HACS](https://hacs.xyz/) for installation
 
 ## Installation
 
-### HACS (Recommended)
+### HACS (recommended)
 
 1. Open HACS in your Home Assistant sidebar
-2. Click the three-dot menu and select **Custom repositories**
-3. Add `https://github.com/InventoCasa/PV-Excess-Control` as an **Integration**
-4. Search for "PV Excess Control" and click **Download**
+2. Click the three-dot menu → **Custom repositories**
+3. Add this repository URL as an **Integration**
+4. Search for **Solar Power Control** and click **Download**
 5. Restart Home Assistant
-6. Go to **Settings → Devices & Services → Add Integration** and search for **PV Excess Control**
+6. Go to **Settings → Devices & Services → Add Integration** and search for **Solar Power Control**
 
 ### Manual
 
-1. Download or clone this repository
-2. Copy the `custom_components/pv_excess_control` folder into your `config/custom_components/` directory
-3. Restart Home Assistant
-4. Go to **Settings → Devices & Services → Add Integration** and search for **PV Excess Control**
+1. Copy the `custom_components/solar_power_control` folder into your `config/custom_components/` directory
+2. Restart Home Assistant
+3. Go to **Settings → Devices & Services → Add Integration** and search for **Solar Power Control**
 
-## Quick Start
+## Quick start
 
-1. **Add the integration** - Settings → Devices & Services → Add Integration → PV Excess Control
-2. **Configure your inverter** - Select Standard or Hybrid, then map your power sensors
-3. **Configure energy pricing** - Select your tariff provider or leave it as None
-4. **Add appliances** - Use the integration's sub-device UI to add each appliance
-5. **Set up your dashboard** — See the [Dashboard Examples](docs/dashboard-examples.md) for ready-to-use YAML configurations using popular community cards.
+### 1. Add the integration
 
-See the [full documentation](docs/) for detailed setup guides.
+Go to **Settings → Devices & Services → Add Integration → Solar Power Control**.
 
-## Documentation
+**Step 1 — Sensor mapping**
 
-- [Installation Guide](docs/installation.md)
-- [Configuration](docs/configuration/)
-  - [Initial Setup](docs/configuration/initial-setup.md)
-  - [Sensor Mapping](docs/configuration/sensor-mapping.md)
-  - [Adding Appliances](docs/configuration/adding-appliances.md)
-  - [Energy Pricing](docs/configuration/energy-pricing.md)
-  - [Solar Forecast](docs/configuration/solar-forecast.md)
-  - [Multi-Inverter Setup](docs/configuration/multi-inverter.md)
-- [Features](docs/features/)
-  - [Battery Management](docs/features/battery-management.md)
-  - [Dynamic Current Control](docs/features/dynamic-current.md)
-  - [EV Charging](docs/features/ev-charging.md)
-  - [Tariff Optimization](docs/features/tariff-optimization.md)
-  - [Export Limiting](docs/features/export-limiting.md)
-  - [Weather Pre-Planning](docs/features/weather-preplanning.md)
-  - [Notifications](docs/features/notifications.md)
-  - [Analytics](docs/features/analytics.md)
-- [Dashboard](docs/dashboard/)
-  - [Dashboard Examples](docs/dashboard-examples.md)
-  - [Entity Reference](docs/dashboard/custom-dashboards.md)
-- [Advanced](docs/advanced/)
-  - [How It Works](docs/advanced/how-it-works.md)
-  - [Priority Guide](docs/advanced/priority-guide.md)
-  - [Troubleshooting](docs/advanced/troubleshooting.md)
-  - [Automation Examples](docs/advanced/automation-examples.md)
-- [Migration from Blueprint](docs/migration.md)
+| Field | Description |
+|---|---|
+| PV Production Power Sensor | Your inverter's current output in W or kW |
+| Grid Export Power Sensor | Power currently exported to the grid |
+| Combined Import/Export Sensor | Single sensor: positive = export, negative = import |
+| Load Power Sensor | Total household consumption |
+| Grid Voltage | Your local grid voltage (default 230 V) |
 
-## Architecture
+You need to provide the PV sensor and at least one of the grid/load sensors. The integration supports both W and kW sensors and converts automatically.
 
-The integration uses a hybrid real-time + planning approach:
+**Step 2 — Settings**
 
-- **Real-time Controller** (every 30 s) - Reads live sensor data, applies optimizer decisions
-- **Forward-Looking Planner** (every 15 min) - Creates optimal 24-hour schedules using forecast and tariff data
-- **Pure-Logic Optimizer** - Zero HA dependencies, fully unit-testable decision engine
+| Field | Default | Description |
+|---|---|---|
+| Shed Threshold | −50 W | How far negative the surplus can go before appliances start turning off |
+| Controller Interval | 30 s | How often sensors are read |
+| Enable Preemption | On | Whether lower-priority appliances can be shed to start higher-priority ones |
 
-## Support this project
+### 2. Add appliances
 
-PV Excess Control is designed to reduce your energy bills and maximize your solar investment. If this integration brings measurable value to your home and you'd like to support its ongoing development, consider [sponsoring me on GitHub](https://github.com/sponsors/InventoCasa) or [buying me a coffee ☕](https://buymeacoffee.com/henrikic). Every contribution helps keep the code open and actively maintained.
+After the integration is set up, click **Configure** and then **Add Appliance** (the subentry button). Repeat for each appliance.
 
-## Contributing
+**Step 1 — Basic info**
 
-Contributions are welcome! Please open an issue first to discuss proposed changes. Pull requests should include tests for new logic and must pass the existing test suite.
+| Field | Description |
+|---|---|
+| Name | Friendly name shown in HA |
+| Entity | The switch, input_boolean, light, climate or fan entity to control |
+| Priority | 1–1000, lower = higher priority |
+| Nominal Power | Rated consumption in watts |
+| Actual Power Sensor | Optional — for accurate analytics |
+| Phases | 1, 2 or 3 (relevant for EV chargers) |
 
-```bash
-pip install -r requirements_test.txt
-python3 -m pytest tests/ --ignore=tests/playwright --ignore=tests/ha_integration_test.py
-```
+**Step 2 — Dynamic current (EV chargers)**
 
+Leave **Dynamic Current** disabled for simple on/off appliances (dishwasher, water heater, etc.).
+
+Enable it for EV chargers and wallboxes:
+
+| Field | Description |
+|---|---|
+| Current Control Entity | The `number` entity that sets charging amps |
+| Min / Max Current | Operating range in amperes |
+| Step Size | Resolution of adjustments (0.1 A or 1.0 A) |
+| EV SoC Sensor | Battery level sensor — stops charging at target |
+| EV Connected Sensor | Binary sensor — stops charging when unplugged |
+| EV Target SoC | Stop at this charge level (%) |
+
+**Step 3 — Constraints**
+
+| Field | Default | Description |
+|---|---|---|
+| Switch Interval | 300 s | Minimum seconds between on/off changes |
+| Averaging Window | — | Seconds of history to average (leave empty for global default) |
+| On Only | Off | Never turn off automatically |
+| Protect From Preemption | Off | Cannot be shed for a higher-priority appliance |
+| Activation Buffer | 200 W | Extra surplus required above nominal power to trigger activation |
+| Completion Power Threshold | — | Below this wattage, the appliance counts as done (e.g. dishwasher on standby) |
+| Requires Appliance | — | Must be running before this appliance can start |
+| Helper Only | Off | Only starts when another appliance needs it |
+
+## Entities created
+
+For each appliance the integration creates:
+
+| Entity | Type | Description |
+|---|---|---|
+| `sensor.*_power` | Sensor | Current power draw |
+| `sensor.*_runtime_today` | Sensor | Hours run today |
+| `sensor.*_energy_today` | Sensor | kWh consumed today |
+| `sensor.*_activations_today` | Sensor | Times turned on today |
+| `sensor.*_status` | Sensor | Current decision and reason |
+| `switch.*_enabled` | Switch | Enable/disable this appliance |
+| `switch.*_override` | Switch | Force on regardless of surplus |
+| `number.*_priority` | Number | Adjustable priority |
+| `binary_sensor.*_active` | Binary sensor | Is the appliance currently on? |
+
+The integration also creates global entities:
+
+| Entity | Description |
+|---|---|
+| `sensor.*_excess_power` | Current calculated surplus in W |
+| `binary_sensor.*_excess_available` | True when surplus exceeds 50 W (averaged) |
+| `switch.*_control_enabled` | Master enable/disable switch |
+
+## How the control logic works
+
+Every cycle the optimizer runs three phases:
+
+1. **Assess** — calculate the average excess power from recent history. If fewer than 3 samples are available (startup), only safety rules apply.
+2. **Allocate** — iterate through appliances in priority order. Turn on each one if the average surplus covers its consumption plus the activation buffer. For dynamic-current appliances, calculate and set the optimal current.
+3. **Shed** — if the instantaneous surplus falls below the shed threshold (default −50 W), turn off the lowest-priority appliances until the balance is restored.
+
+Between phases 2 and 3, **preemption** can shed a lower-priority ON appliance to free up enough power to start a higher-priority IDLE one.
+
+## Excess power calculation
+
+The integration calculates surplus as follows:
+
+- **Combined import/export sensor** (e.g. `sensor.grid_power` where positive = export): surplus = sensor value
+- **Separate grid export sensor**: surplus = export value (positive means sending to grid)
+- **PV + load sensors**: surplus = PV production − load
 
 ## License
 
-This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)** - see the [LICENSE](LICENSE) file for details.
-
-**What this means:**
-- **Personal use** - fully free, no restrictions
-- **Commercial use** - if you integrate this into a product or service, you must open-source your entire work under AGPL-3.0
-- **Commercial licensing** - for proprietary/commercial use without the AGPL obligations, [contact InventoCasa](https://inventocasa.de/kontakt/) for a commercial license
+Licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)** — see the [LICENSE](LICENSE) file for details.
