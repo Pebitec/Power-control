@@ -32,6 +32,7 @@ from .const import (
     CONF_GRID_EXPORT,
     CONF_HELPER_ONLY,
     CONF_IMPORT_EXPORT,
+    CONF_INVERT_IMPORT_EXPORT,
     CONF_LOAD_POWER,
     CONF_NOMINAL_POWER,
     CONF_OFF_THRESHOLD,
@@ -313,6 +314,8 @@ class SolarPowerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 grid_export = None
                 grid_import = None
             else:
+                if data.get(CONF_INVERT_IMPORT_EXPORT, False):
+                    combined = -combined
                 grid_export = max(combined, 0.0)
                 grid_import = abs(min(combined, 0.0))
         elif grid_export_entity:

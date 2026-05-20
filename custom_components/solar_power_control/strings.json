@@ -8,13 +8,15 @@
           "pv_power": "PV Production Power Sensor",
           "grid_export": "Grid Export Power Sensor",
           "import_export_power": "Combined Import/Export Power Sensor",
-          "load_power": "Load Power Sensor"
+          "load_power": "Load Power Sensor",
+          "invert_import_export": "Invert Combined Import/Export Sensor"
         },
         "data_description": {
           "pv_power": "Sensor that reports your current PV production (W or kW — automatically converted).",
           "grid_export": "Sensor that reports power exported to the grid (W or kW — automatically converted).",
           "import_export_power": "Combined sensor where positive = export, negative = import (W or kW — automatically converted). Use this instead of Grid Export if your inverter provides a single combined sensor.",
-          "load_power": "Sensor that reports your total household load (W or kW — automatically converted). When provided, excess is calculated as PV production minus load."
+          "load_power": "Sensor that reports your total household load (W or kW — automatically converted). When provided, excess is calculated as PV production minus load.",
+          "invert_import_export": "Enable if your meter reports positive = import (buying from grid) and negative = export (solar surplus). This is the opposite of the default convention."
         }
       },
       "settings": {
@@ -151,13 +153,15 @@
           "pv_power": "PV Production Power Sensor",
           "grid_export": "Grid Export Power Sensor",
           "import_export_power": "Combined Import/Export Power Sensor",
-          "load_power": "Load Power Sensor"
+          "load_power": "Load Power Sensor",
+          "invert_import_export": "Invert Combined Import/Export Sensor"
         },
         "data_description": {
           "pv_power": "Sensor that reports your current PV production (W or kW — automatically converted).",
           "grid_export": "Sensor that reports power exported to the grid (W or kW — automatically converted).",
           "import_export_power": "Combined sensor where positive = export, negative = import (W or kW — automatically converted).",
-          "load_power": "Sensor that reports your total household load (W or kW — automatically converted)."
+          "load_power": "Sensor that reports your total household load (W or kW — automatically converted).",
+          "invert_import_export": "Enable if your meter reports positive = import (buying from grid) and negative = export (solar surplus)."
         }
       },
       "settings": {

@@ -49,6 +49,7 @@ from .const import (
     CONF_GRID_EXPORT,
     CONF_HELPER_ONLY,
     CONF_IMPORT_EXPORT,
+    CONF_INVERT_IMPORT_EXPORT,
     CONF_LOAD_POWER,
     CONF_NOMINAL_POWER,
     CONF_OFF_THRESHOLD,
@@ -105,6 +106,10 @@ def _sensor_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                 CONF_LOAD_POWER,
                 description={"suggested_value": d.get(CONF_LOAD_POWER)},
             ): SENSOR_ENTITY_SELECTOR,
+            vol.Required(
+                CONF_INVERT_IMPORT_EXPORT,
+                default=d.get(CONF_INVERT_IMPORT_EXPORT, False),
+            ): BooleanSelector(),
         }
     )
 
