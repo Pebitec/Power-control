@@ -29,6 +29,7 @@ class Action(StrEnum):
 CONF_PV_POWER = "pv_power"
 CONF_GRID_EXPORT = "grid_export"
 CONF_IMPORT_EXPORT = "import_export_power"
+CONF_INVERT_IMPORT_EXPORT = "invert_import_export"
 CONF_LOAD_POWER = "load_power"
 CONF_CONTROLLER_INTERVAL = "controller_interval"
 CONF_ENABLE_PREEMPTION = "enable_preemption"
